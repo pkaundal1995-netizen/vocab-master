@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Vocab Master</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#f2f5fc;color:#18243b;font-family:Arial,sans-serif}
@@ -52,7 +53,7 @@ input{width:100%;padding:13px;border:1px solid #ccd5e5;border-radius:9px;margin:
 <button onclick="start('revision')">Revision</button>
 <button class="secondary" onclick="upload.click()">Upload Material</button>
 </div>
-<input type="file" id="upload" accept=".json,.txt" hidden onchange="importFile(event)">
+<input type="file" id="upload" accept=".pdf,.json,.txt,application/pdf" hidden onchange="importFile(event)">
 <div class="card">
 <h3>Weekly Vocabulary</h3>
 <p class="small">Add words, meanings, synonyms and antonyms to build your personal database.</p>
@@ -186,7 +187,113 @@ $("test").style.display="none";$("result").style.display="block";
 $("finalscore").textContent=correct+" / "+questions.length;
 $("finalmessage").textContent="Accuracy: "+Math.round(correct/questions.length*100)+"%";
 }
-function importFile(e){
+
+async function importFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  try {
+    let text = "";
+
+    if (file.name.toLowerCase().endsWith(".pdf")) {
+      if (!window.pdfjsLib) {
+        throw new Error("PDF reader not loaded. Refresh the app.");
+      }
+
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+      const pdf = await pdfjsLib.getDocument({
+        data: await file.arrayBuffer()
+      }).promise;
+
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        text += content.items.map(x => x.str).join(" ") + "\n";
+      }
+
+    } else {
+      text = await file.text();
+    }
+
+    if (file.name.toLowerCase().endsWith(".json")) {
+      const data = JSON.parse(text);
+      if (!Array.isArray(data)) throw new Error("Invalid JSON");
+
+      data.forEach(x => {
+        if (x.w && x.m) {
+          words.push({
+            w: x.w,
+            m: x.m,
+            s: x.s || [],
+            a: x.a || []
+          });
+        }
+      });
+
+    } else {
+      const lines = text.split(/\n/);
+      let added = 0;
+
+      lines.forEach(line => {
+        line = line.trim();
+        if (!line) return;
+
+        const match = line.match(
+          /^(?:\d+[\).]?\s*)?([A-Za-z][A-Za-z -]{1,35})\s*[:–-]\s*(.*)$/
+        );
+
+        if (!match) return;
+
+        const word = match[1].trim();
+        const rest = match[2];
+
+        const synMatch = rest.match(/synonyms?\s*:\s*([^;|]+)/i);
+        const antMatch = rest.match(/antonyms?\s*:\s*([^;|]+)/i);
+
+        let meaning = rest
+          .replace(/synonyms?\s*:.*/i, "")
+          .replace(/antonyms?\s*:.*/i, "")
+          .trim();
+
+        const synonyms = synMatch
+          ? synMatch[1].split(/[,;]/).map(x => x.trim()).filter(Boolean)
+          : [];
+
+        const antonyms = antMatch
+          ? antMatch[1].split(/[,;]/).map(x => x.trim()).filter(Boolean)
+          : [];
+
+        if (meaning && (synonyms.length || antonyms.length)) {
+          words.push({
+            w: word,
+            m: meaning,
+            s: synonyms,
+            a: antonyms
+          });
+          added++;
+        }
+      });
+
+      if (!added) {
+        alert(
+          "Text was extracted, but no vocabulary entries were recognised. Your PDF layout may need a custom parser."
+        );
+        return;
+      }
+    }
+
+    save();
+    alert("Vocabulary imported successfully!");
+
+  } catch (error) {
+    alert("Import failed: " + error.message);
+  } finally {
+    e.target.value = "";
+  }
+            }
+  
 let f=e.target.files[0];if(!f)return;
 let reader=new FileReader();
 reader.onload=()=>{
