@@ -1,0 +1,206 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vocab Master</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f2f5fc;color:#18243b;font-family:Arial,sans-serif}
+header{background:#173b78;color:white;padding:25px 20px;border-radius:0 0 22px 22px}
+header h1{margin:0;font-size:27px}
+header p{color:#dce8ff}
+main{padding:18px;max-width:600px;margin:auto}
+.stats{display:flex;gap:10px;margin:18px 0}
+.stat{background:white;padding:15px;border-radius:12px;flex:1;text-align:center}
+.stat strong{display:block;font-size:23px;color:#2459a5}
+.menu{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+button{border:0;border-radius:12px;padding:16px;background:#2459a5;color:white;font-size:15px;font-weight:bold;cursor:pointer}
+.menu button{min-height:85px}
+.secondary{background:#e1eaff;color:#173b78}
+.card{background:white;padding:20px;border-radius:16px;margin-top:18px;box-shadow:0 3px 12px #0000000c}
+.word{font-size:30px;text-align:center;margin:25px 0;font-weight:bold}
+.option{display:block;width:100%;margin:10px 0;background:#edf2fc;color:#18243b;text-align:left}
+.option:disabled{opacity:1}
+.correct{background:#c8f3d5!important;color:#12602b!important}
+.wrong{background:#ffd9d9!important;color:#9b1717!important}
+#test,#result{display:none}
+input{width:100%;padding:13px;border:1px solid #ccd5e5;border-radius:9px;margin:8px 0}
+.small{font-size:13px;color:#64748b}
+</style>
+</head>
+<body>
+<header>
+<h1>📚 Vocab Master</h1>
+<p>Your personal vocabulary examination trainer</p>
+</header>
+<main>
+<section id="home">
+<h3>Welcome, Learner!</h3>
+<p>Improve your vocabulary every day.</p>
+<div class="stats">
+<div class="stat"><strong id="total">0</strong><span class="small">Words</span></div>
+<div class="stat"><strong id="score">0</strong><span class="small">Correct</span></div>
+</div>
+<h3>Choose your practice</h3>
+<div class="menu">
+<button onclick="start('synonym')">Synonyms</button>
+<button onclick="start('antonym')">Antonyms</button>
+<button onclick="start('mixed')">Mixed Test</button>
+<button onclick="showWords()">My Vocabulary</button>
+<button onclick="start('revision')">Revision</button>
+<button class="secondary" onclick="upload.click()">Upload Material</button>
+</div>
+<input type="file" id="upload" accept=".json,.txt" hidden onchange="importFile(event)">
+<div class="card">
+<h3>Weekly Vocabulary</h3>
+<p class="small">Add words, meanings, synonyms and antonyms to build your personal database.</p>
+<input id="newword" placeholder="Enter word">
+<input id="meaning" placeholder="Meaning">
+<input id="syn" placeholder="Synonyms (comma separated)">
+<input id="ant" placeholder="Antonyms (comma separated)">
+<button onclick="addWord()">Save Vocabulary</button>
+</div>
+<div class="card">
+<h3>My progress</h3>
+<p id="progress">Start practising to track your progress.</p>
+</div>
+</section>
+
+<section id="test">
+<div class="card">
+<p id="number" class="small"></p>
+<h3 id="kind"></h3>
+<div class="word" id="question"></div>
+<p style="text-align:center">Choose the correct answer</p>
+<div id="options"></div>
+<p id="feedback"></p>
+<button id="next" onclick="nextQuestion()" style="display:none;width:100%">Next Question →</button>
+</div>
+</section>
+
+<section id="result">
+<div class="card" style="text-align:center">
+<h2>Test Completed!</h2>
+<div class="word" id="finalscore"></div>
+<p id="finalmessage"></p>
+<button onclick="home()" style="width:100%">Back to Home</button>
+</div>
+</section>
+</main>
+<script>
+const samples=[
+{w:"Abundant",m:"Existing in large quantities",s:["Plentiful","Ample","Copious"],a:["Scarce","Limited","Meagre"]},
+{w:"Benevolent",m:"Kind and generous",s:["Kind","Charitable","Generous"],a:["Cruel","Selfish","Malevolent"]},
+{w:"Candid",m:"Truthful and straightforward",s:["Frank","Honest","Open"],a:["Dishonest","Deceitful","Evasive"]},
+{w:"Diligent",m:"Showing careful effort",s:["Hardworking","Industrious","Careful"],a:["Lazy","Careless","Idle"]},
+{w:"Eloquent",m:"Fluent and persuasive in speaking",s:["Expressive","Articulate","Fluent"],a:["Inarticulate","Hesitant","Tongue-tied"]},
+{w:"Fragile",m:"Easily broken or damaged",s:["Delicate","Brittle","Frail"],a:["Strong","Sturdy","Durable"]},
+{w:"Hostile",m:"Unfriendly or aggressive",s:["Aggressive","Unfriendly","Antagonistic"],a:["Friendly","Kind","Peaceful"]},
+{w:"Lucid",m:"Clear and easy to understand",s:["Clear","Understandable","Coherent"],a:["Confusing","Obscure","Unclear"]},
+{w:"Meticulous",m:"Very careful about details",s:["Thorough","Precise","Careful"],a:["Careless","Negligent","Sloppy"]},
+{w:"Obsolete",m:"No longer in use",s:["Outdated","Antiquated","Old-fashioned"],a:["Modern","Current","Contemporary"]}
+];
+let words=JSON.parse(localStorage.getItem("vocab")||"null")||samples;
+let history=JSON.parse(localStorage.getItem("history")||"{}");
+let questions=[],index=0,correct=0,answered=false;
+const $=id=>document.getElementById(id);
+function save(){
+localStorage.setItem("vocab",JSON.stringify(words));
+localStorage.setItem("history",JSON.stringify(history));
+update();
+}
+function update(){
+$("total").textContent=words.length;
+$("score").textContent=Object.values(history).reduce((a,b)=>a+b,0);
+$("progress").textContent="Words learned: "+words.length+" | Correct answers: "+$("score").textContent;
+}
+function addWord(){
+let w=$("newword").value.trim();
+if(!w||!$("meaning").value.trim()){alert("Enter a word and its meaning.");return}
+words.push({w,m:$("meaning").value.trim(),s:$("syn").value.split(",").map(x=>x.trim()).filter(Boolean),a:$("ant").value.split(",").map(x=>x.trim()).filter(Boolean)});
+["newword","meaning","syn","ant"].forEach(id=>$(id).value="");
+save();alert("Vocabulary saved!");
+}
+function showWords(){
+alert(words.map(x=>x.w+" — "+x.m+"\nSynonyms: "+x.s.join(", ")+"\nAntonyms: "+x.a.join(", ")).join("\n\n")||"No words yet");
+}
+function home(){
+$("home").style.display="block";$("test").style.display="none";$("result").style.display="none";update();
+}
+function start(mode){
+let pool=mode==="revision"?words.filter(x=>history[x.w]):words;
+if(!pool.length){alert("No revision words yet. Complete a test first.");return}
+questions=pool.map(x=>({word:x,type:mode==="mixed"?(Math.random()<.5?"synonym":"antonym"):mode==="revision"?(Math.random()<.5?"synonym":"antonym"):mode})).filter(q=>q.type==="synonym"?q.word.s.length:q.word.a.length);
+if(!questions.length){alert("No suitable questions. Add synonyms and antonyms first.");return}
+questions.sort(()=>Math.random()-.5);
+questions=questions.slice(0,Math.min(10,questions.length));
+index=0;correct=0;
+$("home").style.display="none";$("result").style.display="none";$("test").style.display="block";
+render();
+}
+function render(){
+answered=false;
+let q=questions[index],w=q.word;
+$("number").textContent="QUESTION "+(index+1)+" / "+questions.length;
+$("kind").textContent=q.type==="synonym"?"Choose the synonym":"Choose the antonym";
+$("question").textContent=w.w;
+$("feedback").textContent="";
+$("next").style.display="none";
+let correctAnswer=(q.type==="synonym"?w.s:w.a)[0];
+let pool=words.flatMap(x=>q.type==="synonym"?x.s:x.a).filter(x=>x.toLowerCase()!==correctAnswer.toLowerCase());
+let choices=[correctAnswer];
+while(choices.length<4&&pool.length){
+let n=pool.splice(Math.floor(Math.random()*pool.length),1)[0];
+if(!choices.some(x=>x.toLowerCase()===n.toLowerCase()))choices.push(n);
+}
+choices.sort(()=>Math.random()-.5);
+$("options").innerHTML="";
+choices.forEach(c=>{
+let b=document.createElement("button");
+b.className="option";b.textContent=c;
+b.onclick=()=>choose(c,correctAnswer,w,b);
+$("options").appendChild(b);
+});
+}
+function choose(choice,answer,w,btn){
+if(answered)return;
+answered=true;
+let ok=choice.toLowerCase()===answer.toLowerCase();
+if(ok)correct++;
+history[w.w]=(history[w.w]||0)+(ok?1:0);
+save();
+document.querySelectorAll(".option").forEach(b=>{
+b.disabled=true;
+if(b.textContent===answer)b.classList.add("correct");
+});
+if(!ok)btn.classList.add("wrong");
+$("feedback").textContent=(ok?"Correct! ✓ ":"Incorrect. ✗ ")+"Meaning: "+w.m;
+$("next").style.display="block";
+}
+function nextQuestion(){
+index++;
+if(index<questions.length){render();return}
+$("test").style.display="none";$("result").style.display="block";
+$("finalscore").textContent=correct+" / "+questions.length;
+$("finalmessage").textContent="Accuracy: "+Math.round(correct/questions.length*100)+"%";
+}
+function importFile(e){
+let f=e.target.files[0];if(!f)return;
+let reader=new FileReader();
+reader.onload=()=>{
+try{
+let data=f.name.endsWith(".json")?JSON.parse(reader.result):JSON.parse(reader.result);
+if(!Array.isArray(data))throw Error();
+data.forEach(x=>{if(x.w&&x.m)words.push({w:x.w,m:x.m,s:x.s||[],a:x.a||[]})});
+save();alert("Vocabulary imported!");
+}catch(err){alert("Please use a valid JSON file containing w, m, s and a fields.")}
+e.target.value="";
+};
+reader.readAsText(f);
+}
+update();
+</script>
+</body>
+</html>
