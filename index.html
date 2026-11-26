@@ -193,11 +193,25 @@ async function importFile(e) {
   if (!file) return;
 
   try {
-    let text = "";
+    if (file.name.toLowerCase().endsWith(".json")) {
+      const data = JSON.parse(await file.text());
 
-    if (file.name.toLowerCase().endsWith(".pdf")) {
-      if (!window.pdfjsLib) {
-        throw new Error("PDF reader not loaded. Refresh the app.");
+      if (!Array.isArray(data)) {
+        throw new Error("JSON file must contain a list of words.");
+      }
+
+      data.forEach(x => {
+        if (x.w && x.m) words.push({
+          w: x.w,
+          m: x.m,
+          s: x.s || "",
+          a: x.a || ""
+        });
+      });
+
+    } else if (file.name.toLowerCase().endsWith(".pdf")) {
+      if (typeof pdfjsLib === "undefined") {
+        throw new Error("PDF reader did not load. Check your internet connection.");
       }
 
       pdfjsLib.GlobalWorkerOptions.workerSrc =
@@ -207,92 +221,114 @@ async function importFile(e) {
         data: await file.arrayBuffer()
       }).promise;
 
+      let lines = [];
+
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
-        text += content.items.map(x => x.str).join(" ") + "\n";
+        const rows = [];
+
+        content.items.forEach(item => {
+          if (!item.str || !item.str.trim()) return;
+
+          const y = Math.round(item.transform[5]);
+          let row = rows.find(r => Math.abs(r.y - y) <= 2);
+
+          if (!row) {
+            row = { y, parts: [] };
+            rows.push(row);
+          }
+
+          row.parts.push(item.str);
+        });
+
+        rows.sort((a, b) => b.y - a.y);
+
+        rows.forEach(row => {
+          lines.push(row.parts.join(" ").replace(/\s+/g, " ").trim());
+        });
       }
 
-    } else {
-      text = await file.text();
-    }
+      let current = null;
+      let imported = [];
 
-    if (file.name.toLowerCase().endsWith(".json")) {
-      const data = JSON.parse(text);
-      if (!Array.isArray(data)) throw new Error("Invalid JSON");
+      function clean(value) {
+        return value.replace(/\s+/g, " ").trim();
+      }
 
-      data.forEach(x => {
-        if (x.w && x.m) {
-          words.push({
-            w: x.w,
-            m: x.m,
-            s: x.s || [],
-            a: x.a || []
-          });
+      function finishEntry() {
+        if (current && current.w && current.m) {
+          imported.push(current);
         }
-      });
-
-    } else {
-      const lines = text.split(/\n/);
-      let added = 0;
+      }
 
       lines.forEach(line => {
-        line = line.trim();
+        line = clean(line);
         if (!line) return;
 
-        const match = line.match(
-          /^(?:\d+[\).]?\s*)?([A-Za-z][A-Za-z -]{1,35})\s*[:–-]\s*(.*)$/
-        );
+        const heading = line.match(/^\s*\d+\s*[.)]\s*(.+)$/);
 
-        if (!match) return;
+        if (heading) {
+          finishEntry();
 
-        const word = match[1].trim();
-        const rest = match[2];
+          let word = heading[1].split(/[–—]/)[0];
+          word = word.replace(/\([^)]*\)/g, "").trim();
+          word = word.replace(/[-:]\s*$/, "").trim();
 
-        const synMatch = rest.match(/synonyms?\s*:\s*([^;|]+)/i);
-        const antMatch = rest.match(/antonyms?\s*:\s*([^;|]+)/i);
+          if (word && word.length < 60) {
+            current = { w: word, m: "", s: "", a: "" };
+          } else {
+            current = null;
+          }
+          return;
+        }
 
-        let meaning = rest
-          .replace(/synonyms?\s*:.*/i, "")
-          .replace(/antonyms?\s*:.*/i, "")
-          .trim();
+        if (!current) return;
 
-        const synonyms = synMatch
-          ? synMatch[1].split(/[,;]/).map(x => x.trim()).filter(Boolean)
-          : [];
+        const label = line.match(/^(Meaning|Synonyms|Antonyms|Example)\s*:\s*(.*)$/i);
 
-        const antonyms = antMatch
-          ? antMatch[1].split(/[,;]/).map(x => x.trim()).filter(Boolean)
-          : [];
+        if (label) {
+          const type = label[1].toLowerCase();
+          const value = label[2];
 
-        if (meaning && (synonyms.length || antonyms.length)) {
-          words.push({
-            w: word,
-            m: meaning,
-            s: synonyms,
-            a: antonyms
-          });
-          added++;
+          if (type === "meaning") current.m = value;
+          if (type === "synonyms") current.s = value;
+          if (type === "antonyms") current.a = value;
+        } else if (!current.m) {
+          // Ignore unrelated page headings and introductory text.
+        } else if (current.a && !current.example) {
+          // Keep the example separate from quiz vocabulary.
+          current.example = line;
         }
       });
 
-      if (!added) {
-        alert(
-          "Text was extracted, but no vocabulary entries were recognised. Your PDF layout may need a custom parser."
-        );
+      finishEntry();
+
+      imported.forEach(x => words.push(x));
+
+      if (!imported.length) {
+        alert("PDF text was read, but no vocabulary entries were recognised.");
         return;
       }
+
+      save();
+      alert(imported.length + " vocabulary words imported successfully!");
+
+    } else {
+      throw new Error("Please select a PDF or JSON file.");
     }
 
     save();
-    alert("Vocabulary imported successfully!");
+    update();
 
   } catch (error) {
     alert("Import failed: " + error.message);
   } finally {
     e.target.value = "";
   }
-            }
+        }
+  
+
 
 update();
 </script>
