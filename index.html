@@ -293,20 +293,7 @@ async function importFile(e) {
     e.target.value = "";
   }
             }
-  
-let f=e.target.files[0];if(!f)return;
-let reader=new FileReader();
-reader.onload=()=>{
-try{
-let data=f.name.endsWith(".json")?JSON.parse(reader.result):JSON.parse(reader.result);
-if(!Array.isArray(data))throw Error();
-data.forEach(x=>{if(x.w&&x.m)words.push({w:x.w,m:x.m,s:x.s||[],a:x.a||[]})});
-save();alert("Vocabulary imported!");
-}catch(err){alert("Please use a valid JSON file containing w, m, s and a fields.")}
-e.target.value="";
-};
-reader.readAsText(f);
-}
+
 update();
 </script>
 </body>
