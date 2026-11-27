@@ -136,7 +136,7 @@ if(!pool.length){alert("No revision words yet. Complete a test first.");return}
 questions=pool.map(x=>({word:x,type:mode==="mixed"?(Math.random()<.5?"synonym":"antonym"):mode==="revision"?(Math.random()<.5?"synonym":"antonym"):mode})).filter(q=>q.type==="synonym"?q.word.s.length:q.word.a.length);
 if(!questions.length){alert("No suitable questions. Add synonyms and antonyms first.");return}
 questions.sort(()=>Math.random()-.5);
-questions=questions.slice(0,Math.min(10,questions.length));
+questions=questions.slice(0,Math.min(20,questions.length));
 index=0;correct=0;
 $("home").style.display="none";$("result").style.display="none";$("test").style.display="block";
 render();
