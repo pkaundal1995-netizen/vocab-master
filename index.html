@@ -131,6 +131,14 @@ function home(){
 $("home").style.display="block";$("test").style.display="none";$("result").style.display="none";update();
 }
 function start(mode){
+  words.forEach(x=>{
+  if(typeof x.s==="string")
+    x.s=x.s.split(/[,;]+/).map(v=>v.trim()).filter(Boolean);
+
+  if(typeof x.a==="string")
+    x.a=x.a.split(/[,;]+/).map(v=>v.trim()).filter(Boolean);
+});
+save();
 let pool=mode==="revision"?words.filter(x=>history[x.w]):words;
 if(!pool.length){alert("No revision words yet. Complete a test first.");return}
 questions=pool.map(x=>({word:x,type:mode==="mixed"?(Math.random()<.5?"synonym":"antonym"):mode==="revision"?(Math.random()<.5?"synonym":"antonym"):mode})).filter(q=>q.type==="synonym"?q.word.s.length:q.word.a.length);
